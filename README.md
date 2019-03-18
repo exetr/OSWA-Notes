@@ -97,7 +97,7 @@ Defined as the maximum rance to which a given transmitter at a given transmissio
 - **Maxmium SOIL**: Maximum range where communications link between TX and RX can be physically maintained
 - **Signal Reacquisition SOIL**: Minimum range where RX can successfully reassociate with TX
 
-Attackers are usually concerned about SR-SOIL, users more concerned about MAX-SOIL. SOIL helps to establish the area of coverage of a given device, to determine if there is enough signal leakage that someone may be able to acquire the signal, decode the contents at a higher layer and proceed to sufficiently safe distance to carry out any exploratory, enumatory and exploitary work.
+Attackers are usually concerned about SR-SOIL, users more concerned about MAX-SOIL. SOIL helps to establish the area of coverage of a given device, to determine if there is enough signal leakage that someone may be able to acquire the signal, decode the contents at a higher layer and proceed to sufficiently safe distance to carry out any exploratory, enumatory and exploitary work. Once an attacker's connection is dropped (moves beyond MAX-SOIL), he or she will have to get much closer to the AP before reassociation (SR-SOIL)
 
 #### IEEE 802.11 Channels
 
@@ -128,13 +128,13 @@ It is popular as it can be always activated, can automatically connect to device
 
 ##### Bluetooth Attacks
 
-- Bluesnarf: Theft of information from devices
-- Bluedoor: Abuse of pairing mechanism, removed device not actually removed from register, no restrictions once authenticated
-- Bluejacking: Sending of message, does not involve any kind of hijacking
-- Bluebug: Access gained to AT command set of device, providing full access to higher level commands and channels, such as data, voice and messaging
-- Bluesmack: Attempted DosS using L2PING with oversized packets
-- Carwhispering: Attacking bluetooth headsets that allow more than one pairing to record or play messages
-- Bluetooth Works: CommWarrior.Q, Inqtana.A
+- **Bluesnarf**: Theft of information from devices
+- **Bluedoor**: Abuse of pairing mechanism, removed device not actually removed from register, no restrictions once authenticated
+- **Bluejacking**: Sending of message, does not involve any kind of hijacking
+- **Bluebug**: Access gained to AT command set of device, providing full access to higher level commands and channels, such as data, voice and messaging
+- **Bluesmack**: Attempted DosS using L2PING with oversized packets
+- **Carwhispering**: Attacking bluetooth headsets that allow more than one pairing to record or play messages
+- **Bluetooth Worms**: CommWarrior.Q, Inqtana.A
 
 Bluetooth attacks are not as common as 802.11-based attacks, still presents potential risk. Bluesnarfing expeditions to senimars and conferences and grabbing CEO's phonebook info, dialed numbers, and system admins who keep information on bluetooth enabled PDAs. Bluetooth works may result in large bills when mass sending MMS.
 
@@ -173,17 +173,167 @@ Anyone who knows an RFID tag exists can capture its numerical information, all t
  
 #### IEEE 802.11
 
+Commonly known as WiFi (Wireless Fidelity).
+
+##### Terminology
+
+- **Wireless LAN (WLAN)**: Local network area made up of series of APs interconnected by CAT5 cabling or wireless repeaters, through which a WLAN network adapter can access
+- **Access Point (AP)**: Layer 1 device similar to a hub for WLANs
+- **Wireless Repeating**: Capability of equipment to extend network coverage via RF where wired connectivity is impossible or not cost-effective, involves AP being paired with another to form extended WLAN for user access.
+- **Ad-Hoc Mode**: Peer-to-peer WLAN setup comprised of multiple WNICs to establish connectivity between themselves without need for AP
+- **Basic Service Set (BSS)**: A group of 802.11 stations
+- **Independent Basic Service Set (IBSS)**: Network in ad-hoc mode with wireless clients without access point
+- **Infrastructure Mode**: Use of AP's local relaying device to other stations/networks, all stations talk through APs, not directly to each other
+- **Distribution System (DS)**: Means by which AP talks with other APs to exchange frames for stations in their respective BSSes, forward frames to follow mobile stations as they move from one BSS to another and exchanges frames with a wired network.
+- **Basic Service Set ID (BSSID)**: MAC address of AP's radio component. Some APs use different addresses for radio component and wired ethernet port, addresses are likely to be sequential.
+- **Extended Service Set (ESS)**: Set of infrastructure BSSes whose APs communicate amongst themselves to forward traffic from one BSS to another to facilitate movement of mobile stations between them.
+- **Service Set Identifier (SSID)**: Description given to AP's individual sphere of radio influence which describes that AP's network name, every AP has one, sometiles labelled as Extended SSID consisting of multiple APs with same SSID from the basis of ESS WLAN in which users can roam between APs.
+- **Roaming**: Act of disassociating from one AP and associating to another BSS within the ESS
+- **Association/Disassociation**: Connecting and disconnecting from an AP as you enter and leave its RF sphere of influence.
+- **SSID Broadcasting**: Causes an AP to show SSID in frame beacons for any WNIC to detect and connect to, not a good idea unless user is running hotspot.
+- **WEP, WPA-PSK, WPA, WPA2**: Frame payload encryption standards and mechanisms used to provide confidentiality of data.
+- **Master Mode**: WNIC operates as AP, useful for testing wireless client security
+- **Monitor Mode**: WNIC operates in RFMON mode, 802.3 promiscuous NIC equivalent. Monitor mode allows you to sniff frames off the air and dump the output to a pcap file.
+
+When doing wireless auditing, chipset is important. Brand is insignificant, need a chipset that is natively supported by Linux. Divers and firmware are needed to support frame injection which is necessary to conduct replay and deauthentication attacks.
+
+##### Wireless Frame Architecture & Analysis
+
+802.11 MAC Layer also handles acknowledegement, packet retransmission and fragmentation, has Carrier Sense Multiple Access with Collision Avoidance (CSMA/CA) with positive acknowledgements.
+
+- Virtual Carrier Sense: Request-To-Send (RTS) and Clear-To-Send (CTS), both update NAV duration and work with CSMA/CA in sensing medium
+- Send & Wait: Cannot send frame fragment until ACK is received, if none received, entire frame is dropped
+
+##### Frame Control Headers
+
+| Type | Type Description | Subtype | Subtype Description |
+|------|------------------|---------|---------------------|
+|00|Management|0000|Association Request|
+|00|Management|0001|Association Response|
+|00|Management|0010|Reassociation Request|
+|00|Management|0011|Reassociation Response|
+|00|Management|0100|Probe Request|
+|00|Management|0101|Probe Response|
+|00|Management|1000|Beacon|
+|00|Management|1010|Disassociation|
+|00|Management|1011|Authentication|
+|00|Management|1100|Deauthentication|
+|01|Control|||
+|10|Data|||
+|11|Reserved|||
+
+- **ToDS**: Bit set to 1 when frame is addressed to AP for forwarding to Distribution System, includes case where destination is in same BSS and AP is relaying frame.
+- **FromDS**: Bit set to 1 when frame is coming from DS (passed on by AP). 
+- *Additional bits omitted*
+
+Both ToDS and FromDS are set to 0 for management and control frames and when in ad-hoc mode, set to 1 only where frame is being transmitted from 1 AP to another in a WDS (bridge or repeater mode)
+
+##### Association Process
+```
+       | --------- Probe Request --------> |
+       | <-------- Probe Response -------- |
+       | ---- Authentication Request ----> |
+Client | <--- Authentication Response ---- | AP
+       | ------ Association Request -----> |
+       | <----- Association Response ----- |
+       | <--------- Data Traffic --------> |
+```
+
 ### 4. Wireless Security Testing - Infrastructure
 
-*TODO*
+#### 802.11i
+
+802.11i covers wireless security. It has the following encryption schemas:
+- **Wired Equivalent Privacy (WEP)**: 40 Bit and 104 Bit Keys (add 24 Bit IV)
+- **WiFi Protected Access**: Pre-Shared Key and Enterprise (TKIP)
+- **WiFi Protected Access 2**: Pre-Shared Key and Enterprise (CCMP)
+
+802.11i also has authentication components, and is controlled by AuthenticationType parameter of 802.11 management frame:
+- **Open**: Default null algorithm involving identity assertion and authentication request followed by authentication response
+- **Shared Key**: Challenge-response handshake using values derived from WEP Keys.
+
+#### WEP Analysis
+
+WEP revolves around RC4 encyrption algorithm, is a stream cipher encrypting data as it is feed in via a XOR operation. Cipher is made up of 2 components, a random initialisation vector and a pre-shared key, also utilising a cyclic redundancy check to test integrity of transmitted packet.
+
+Vulnerability is in implementation of encryption. When there is IV collision, contents can be XORed to retrieve it in plaintext. Deauthentication attacks can also be carried out to speed up the capturing of IVs in networks with little traffic.
+
+In defending against WEP attacks, even with MAC address filtering, disabling SSID broadcast, limiting RF transmit power, there is no effective defence if relying solely on WEP. As such, users should no longer use WEP.
+
+#### WPA-PSK & WPA2-PSK Analysis
+
+Client sends PSK which forms part of Pairwise Master Key (PMK), derived from `PBKDF2(passphrase,ssid,ssidLength)`. PMK of client and AP are combined twith 2 nonces for 2 packets of the 4-way EAPOL handshake to derive the Pairwise Transient Key (PTK), a hashed value which is used to encrypt the data flow.
+
+The 4-way handshake takes place after association request & response in association process. The four messages include:
+1. AP sends to supplicant a nonce, ANonce
+2. Supplicant creates nonce and calculates PTK, sends SNonce and security parameters to AP
+3. AP sends supplicant security parameters found in beacon and probe responses.
+4. Indication that temporal keys are now in place to be used.
+
+However, most AP vendors only allow single PSK, thus a single PMK which is used to produce PTK. 4-way handshakes can be sniffed together with deauthentication attacks to obtain packet captures. Dictionary attacks can be run against to obtain passphrase.
+
+Defences against attacks include:
+- Passphrases longer than 20 characters
+- Alphanumerical and symbolical passphrases
+- Passphrases should be translation of non-English dialect
+- Passphrases should not be related to person, company or entity that AP belongs to
+- Temporal Key rotation shoule be made as often as possible, including forcing re-keying whenever user joins or leaves letwork, in addition to MAC and IP address filtering and disabling SSID broadcase
+
+#### WPA & WPA2 Enterprise Analysis
+
+Also known as Robust Secure Network (RSN), has an EAP authentication schema generating 256-bit PMK instead of PSK, 802.1x functionality also incorporated. Comprises of 3 components: supplicant, authenticator and authentication server. Supplicant will authenticate with the authentication server through authenticator. Authenticator does not need to perform authentication, it only exchanges information between supplicant and authentication server.
+
+This however requires more resources compared to WPA-PSK. Traffic encryption is also weak so sniffing is made easier. This is addressed through Extensible Authentication Protocol (EAP) family, EAP-TLS, EAP-TTLS and PEAP, which establishes a protected means of encrypting the authentication credentials.
+
+Generally, the components required include: 802.1x compatibel client wireless network adaptors, client supplicant capable of EAP, wireless AP compatible with 802.1x and EAP, RADIUS server compatible with EAP, PKI.
+
+Attackers can still try to trick clients into revealing the challenge-response pair by setting up fake RADIUS servers and getting the client to authenticate with them instead of the legitimate server. Defences against attacks include:
+- Enabling validation of server certificates
+- Specification of IP address of authentication server
+- Establish local Certificate Authorities
+- Disable user permission to authorise new servers
+
+Additionally, mixed-mode WPA is discouraged and there is a lack of ad-hoc mode.
+
+#### 802.11 Based Denial of Service
+
+Clients perform handshakes with APs as part of the association process. This is a possible area of exploit to perform DoS attacks, specifically with the use of authentication/deauthentication and association/disassociation requests and responses. Againts APs, try to flood them with handshaking traffic until the point where they cannot handle legitimate requests. Against clients, deauthentication frames are weapon of choice, as nature of 802.11 protocol specification means that management frames have no security mechanisms for validating senders, this it s is easy to spoof an AP to deauthenticate a client.
+
+In its current form, 802.11w adds cryptographic protection to deauthentication and disassociation frames to prevent spoofing. Security association is also added to prevent spoofed association or authentication requests from disconnecting an already connected client. However, this only works for WPA2 & WPA2-PSK setups as it uses EAPOL exchange to derive shared secret keys. Other attacks such as RF jamming, CTS attacks are not covered by 802.11w schema.
 
 ### 5. Wireless Security Testing - Client
 
-*TODO*
+We must also consider the client-end of things, it is often easier to compromise a wireless client, then use it to get into the corporate network, rather than brute-forcing the WLAN itself. Kismet and airodump can be used to detect probe packets.
+
+#### Windows Slienet Adhoc Network Advertisement
+
+When a user uses an AP at home with the SSID "netgear", the profile will be stored in the laptop. In a public location, when there is also a laptop configured as an ad-hoc network also with an SSID "netgear", the laptop will connect to this AP. The next time the user's laptop is booted up when there is no wired connection and no "netgear" SSID in range, the laptop will start advertising itself as an ad-hoc network with an SSID of "netgear".
+
+#### WEP Client Communication Dumbdown (WCCD)
+
+Certain WNIC driver implementations, after receiving an association response from an AP bearing privacy setting of 0 and where the association request was based off a profile setup to use WEP (setting of 1), will dumb down and associate with the AP using no encryption, where the correct response was not to associate at all.
+
+This can be mitigated by:
+- User Education (remove unused wireless profiles, use WPA, switch off wireless capabilities when not in use, learn how to read which wireless network machine is connected to)
+- No Wireless Policy (purchase machines with no wireless capabilities, enforce no wireless client plugged into network, enforce via Windows AD group policy, install personal firewall, patch management)
 
 ### 6. Testing With A Twist
 
 #### Ph00ling
+
+Encompasses mirroring of SSG together with setting up of fake AP. Usually done by attackers to gain internet access, perform client-side attack, obtain attack platform, credit card fraud, credential theft. It is possible due to physical disconnects between user, attacker and network, RF signal strength race condition, requirement of usage credentials by operator, uneducated users. Reasons to conduct ph00ling include testing for employee awareness of policy, testing for certificate policy, implementation and awareness, testing for ease of attacker launching RF disassociation flood against WLAN and gaining RF supremacy.
+
+The technique starts by crawling web portals for sites to mirror and hosting them locally. Secondly, the setup of DHCP and DNS servers to provide connectivity to the victim and to redirect all traffic back to the attacker. The attacker should also position himself/herself so that deauthentication frames and probe responses sent by the attacker can be received by the victim. 
+
+Best results possible if attacker has at least 2 NICs, one to observe environment and one to perform deauthenticaiton attacks. This can be combined with web-based exploits that allow for remote code execution, with stealthiness depending on the payload being crafted into file and how the OS handles payload.
+
+Defence against ph00ling include:
+- Knowing what the real SSG portal looks like
+- Checking IP addressing issued by real SSG
+- Check page source for calls to weird CGI scripts
+- Check authentic signed certificates with CA
+- Cross check IP to MAC address assignment using `arp -a`
+- When in doube, don't
 
 #### Long Range Auditing
 
@@ -200,7 +350,19 @@ Use power and rate of receipt of signals from wireless APs to determine the loca
 ### 8. Concluding The Audit
 
 - **Unexpected Results**: For situations that are outside the scope under test of unanticipated, refer to the client point-of-contace, with point in time dependendant on severity of issue, key to remember majority of wireless network audit engagements are likely to be based off IEEE 802.11 technologies, may contain other wireless technologies that present security issue. No one can cover nuances of every wireless technology, part of expert's skillset includes conducting research when faced with unfamiliar issue and to broaden education
-- **Reporting Format and Procedure**: Done in a face to face manner, avoid sending an army - maximum of 3 from the testing team, testers who perform actual tests and audit project manager, executive summary and technical report should be delivered to client n secure manner.
+- **Reporting Format and Procedure**: Done in a face to face manner, avoid sending an army - maximum of 3 from the testing team, testers who perform actual tests and audit project manager, executive summary and technical report should be delivered to client in a secure manner.
+
+---
+
+## References & Resources
+
+[List of Linux Wireless Drivers](https://wireless.wiki.kernel.org/en/users/drivers)
+
+[ThinkSECURE OSWA Assistant Compability](http://securitystartshere.org/page-software-oswa-assistant-platforms.htm)
+
+[Chipset Lookup](http://linux-wless.passys.nl/)
+
+[MAC Address Manufacturer Lookup](https://www.macvendorlookup.com/)
 
 ---
 
@@ -210,81 +372,102 @@ This section contains commands for some of the operations you will encounter fre
 
 ### General
 
-- Get IP Address: `pump -i <interface>`
+- Get IP Address from DHCP Server: `pump -i <interface>` or `dhclient`
 - Get Routing Table: `route -n`
-- Reset Interface: `ifconfig <interface> down && ifconfig <interface> up`
+- Restart Interface: `ifconfig <interface> down && ifconfig <interface> up`
 
 ### Interface Configuration
 
-##### Enabling Frame Injection (Ralink Chipsets)
+#### Wireless Chipset Information
+- `airmon-ng`
+- `dmesg | less`
+- `lspci -vv | less` *(For PCI Cards)*
+- `lsusb --vv | less` *(For USB Chipsets)*
+
+*Ralink Chipsets - rt___, Realtek Chipsets - rtl___, Atheros Chipsets - ar___*
+
+#### Enabling Frame Injection (Ralink Chipsets)
 - `iwpriv <interface> forceprism 1`
 - `iwpriv <interface> rfmontx 1`
 
-##### Wireless Modes (Non-Atheros Chipsets) 
+*This **MUST** be done for all Ralink Chipsets, else frame injection will not work properly*
+
+#### Wireless Modes (Non-Atheros Chipsets) 
+Non-Atheros Chipsets
 - `iwconfig <interface> mode <type>`
 
-##### Wireless Modes (Atheros Chipsets) 
+Atheros Chipsets
 - `wlanconfig ath0 destroy`
 - `wlanconfig ath0 create wlandev wifi0 wlanmode <type>`
 
-##### Set ESSID
+#### Set ESSID
 - `iwconfig <interface> essid <ESSID>`
 
-##### Set Channel
+#### Set Channel
 - `iwconfig <interface> channel <channel>`
 
-##### Change Bands
+#### Change Bands
 - `iwpriv <interface> mode <number>`
 
 *Usually, Mode 3 is for 802.11g, Mode 2 is for 802.11b, Mode 1 is for 802.11a*
 
-##### List Discoverable APs
+#### List Discoverable APs
 - `iwlist <interface> ap`
 - `iwlist <interface> accesspoints`
 - `iwlist <interface> scanning`
 
 ### Wireless Operations
 
-##### Sniffing
+#### Sniffing
 - Start sniff: `airodump-ng <interface>`
 - Start sniff and write to file: `airodump-ng <interface> -w <file>`
 - Sniff targeted AP: `airodump-ng -c <channel> -w <file> --bssid=<BSSID> <interface>`
 
-##### Deauthentication Attack
+#### Deauthentication Attack
 - Concept: 
 - `aireplay-ng --deauth 500 -a <BSSID> -c <client MAC> <interface>`
 - `aireplay-ng --arpreplay -b <BSSID> -h <client MAC> <interface>`
 
-##### No-Client Associated Attacks - Interactive Replay Attack
+#### No-Client Associated Attacks - Interactive Replay Attack
 - Concept:
 - `aireplay-ng --fakeauth 15 -e <ESSID> -a <BSSID> -h <client MAC> <interface>`
 - `aireplay-ng --fakeauth 5000 -o 1 -q 15 -e <ESSID> -a <BSSID> -h <client MAC> <interface>`
 - 
 
-##### No-Client Associated Attacks - PRGA-Packetforge-Interactive Attack
+#### No-Client Associated Attacks - PRGA-Packetforge-Interactive Attack
 - Concept:
 
-##### Configure Client to Join WEP AP (Non-Atheros Chipsets)
+#### Configure Client to Join WEP AP (Non-Atheros Chipsets)
 
-##### Configure Client to Join WEP AP (Atheros Chipsets)
+#### Configure Client to Join WEP AP (Atheros Chipsets)
 
-##### Configure Client to Join WPA AP
+#### Configure Client to Join WPA AP
 
 
-##### Get IP Address
+#### Get IP Address
 1. Use Wireshark to sniff traffic to get valid IP address ranges
 2. Assign new IP address: `ifconfig <interface> <IP address> netmask <netmask>`
 3. Set gateway: `route add -net 0.0.0.0 gw <gateway IP>`
 
 ### Cracking
 
-##### WEP
+#### WEP
 - Korek (>500k IVs): `aircrack-ng -a 1 -b <BSSID> <filename>`
 - PTW (>20k IVs or >40k IVs): `aircrack-ng -b <BSSID> <filename>`
 
-##### WPA
+#### WPA
 - Default Attack: `cowpatty -f <dictionary-file> -r <packetdump-file> -s <SSID>`
 - CoWPAtty Nonrestrict Mode: `cowpatty -2 -f <dictionary-file> -r <packetdump-file> -s <SSID>`
 - Wireshark Cleanup: Using Wireshark, identify one valid 4-way handshake, mark and save as, run cowpatty on cleaned file
 - Aircrack: `aircrack-ng -a 2 -e <SSID> -b <BSSID> -w <dictionary> <packetdump>`
 - Retry: Rerun airodump-ng and deauthentication attacks until valid 4-way handshake is obtained
+
+### AP Association
+
+#### Open 
+
+#### WEP
+
+#### WPA
+
+### Denial of Service
