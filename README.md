@@ -158,7 +158,7 @@ A PT is more comprehensive as it actually confirms whether the suspected vulnera
 Observation of degree of electromagnetic activity in RF spectru, more sources of EM energy present in any given portion of RF spectrum, the more interference or noise will be present, degrading communication performance and efficiency as receiver will have to filter off noise before sending filtered signal onwards for upper-layer analysis.
 
 - **Colours**: From extremely strong to extermely weak: Red, yellow, light blue, dark blue
-- *A spectragraph cannot tell you the distance to a particular transmission source, all it tells you is that for a given piece of hardware you are using, a particular RF energy signal on a particular frequency at a particular point in time is of a certain signal strength.
+- *A spectragraph cannot tell you the distance to a particular transmission source, all it tells you is that for a given piece of hardware you are using, a particular RF energy signal on a particular frequency at a particular point in time is of a certain signal strength.*
 - To identify origin of particular signal, move around and determine the relative increase or decrease in signal strength.
 
 #### Sphere Of Influence Limit (SOIL)
@@ -459,6 +459,8 @@ This section contains commands for some of the operations you will encounter fre
 - ToDS Frames: `wlan.fc.tods==1`
 - FromDS Frames: `wlan.fc.fromds==1`
 
+---
+
 ### Interface Configuration
 
 #### Wireless Chipset Information
@@ -524,6 +526,8 @@ Atheros Chipsets
 - `wlanconfig <interface> create wlandev wifi0 wlanmode monitor`
 - `ifconfig <interface> up`
 
+---
+
 ### Wireless Operations & Attacks
 
 #### Sniffing
@@ -560,6 +564,8 @@ Suitable for when there are no associated clients to run active arp-replay attac
 - `packetforge-ng --arp -a <BSSID> -h <client MAC> -l 255.255.255.255 -k 255.255.255.255 -y fragment.xor -w arprequest` *Creates ARP frame, with source and destination IP of 255.255.255.255, using captured PRGA*
 - `aireplay-ng --interactive -r arprequest <interface>` *Injects crafted ARP request to AP`
 
+---
+
 ### Cracking
 
 #### WEP
@@ -585,6 +591,8 @@ Using MDK3
 Using Aireplay
 - `aireplay-ng --deauth 0 -a <BSSID> -c <client MAC> <interface>` *Indefinitely deauthenticate a client*
 - `aireplay-ng --deauth 0 -a <BSSID> <interface>` *Indefinitely deauthenticate all clients connected to AP*
+
+---
 
 ### AP Association
 
@@ -619,7 +627,53 @@ Atheros Chipsets
 
 #### WPA
 
-*TODO*
+Generally,
+- `nedit /etc/network/interfaces`
+
+```
+iface <interface> inet dhcp
+    wpa-driver <driver>
+    wpa-ssid <SSID>
+    wpa-psk <passphrase>
+    wpa-key-mgnt WPA-PSK
+    wpa-pairwise TKIP CCMP
+    wpa-group TKIP CCMP
+    wpa-proto WPA RSN
+    pre-up ifconfig <interface> up
+```
+
+For Ralink Chipset based WNICs
+- `iwconfig <interface> mode managed`
+- `iwpriv <interface> auth 3`
+- `iwpriv <interface> enc 3`
+- `iwconfig <interface> essid <SSID>`
+- `iwpriv <interface> wpapsk <passphrase>`
+- `iwconfig <interface> essid <SSID>`
+
+Then, reload WNIC configuration
+- `/etc/init.d/networking restart`
+- `ifconfig <interface> up`
+
+In certain cases, the WPA supplicant needs to be modified
+- `nedit /etc/wpa_supplicant.conf`
+
+```
+ctrl_interface=/var/wun/wpa_supplicant
+ctrl_interface_group=0
+ap_scan=1
+fast_reauth=1
+eapol_version=1
+network={
+    ssid="<SSID>"
+    scan_ssid=1
+    key_mgmt=WPA-PSK
+    proto=WPA
+    #proto=WPA2
+    pairwise=CCMP TKIP
+    group=CCMP TKIP
+    psk="<passphrase>"
+}
+```
 
 #### Get IP Address
 
@@ -627,6 +681,15 @@ Atheros Chipsets
 2. Assign new IP address: `ifconfig <interface> <IP address> netmask <netmask>`
 3. Set gateway: `route add -net 0.0.0.0 gw <gateway IP>`
 
+---
+
 ### Probemapper
 
-*TODO*
+Mass Client Profiling
+- `probemapper -i <interface> -d <driver> -s -c 1`
+
+Targeted Client Profiling
+- `probemapper -i <interface> -d <driver> -s -t <target MAC address>`
+
+Targeted Client Profiling as an AP
+- `probemapper -i <interface> -d <driver> -t <target MAC address>`
